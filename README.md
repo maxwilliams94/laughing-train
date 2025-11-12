@@ -1,0 +1,1 @@
+Azure Function for turning Trading View webhook notifications into BUY/SELL orders
