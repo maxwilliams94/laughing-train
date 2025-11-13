@@ -91,6 +91,29 @@ Expected JSON payload from TradingView:
 ### Authentication
 The application uses JWT (JSON Web Token) authentication for Coinbase API calls. Credentials are loaded from the `COINBASE_CREDENTIALS` environment variable.
 
+### Startup Connectivity Check
+
+On the first webhook request (or function cold start), the application always verifies Coinbase API connectivity by fetching account balances—even in dry-run mode. This helps catch configuration issues early:
+
+- **When**: Runs once per function instance on first webhook
+- **What**: Calls `GET /api/v3/brokerage/accounts`
+- **Why**: Validates credentials, JWT authentication, and API connectivity
+- **Output**: Logs account count and available balances
+
+Example startup log output:
+```
+INFO: Starting up function app...
+INFO: Verifying Coinbase API connectivity...
+INFO: Successfully connected to Coinbase - 3 accounts found
+INFO: Account balances: BTC: 0.05000000, USD: 1234.56, ETH: 2.30000000
+```
+
+If connectivity fails, you'll see an error before any orders are attempted:
+```
+ERROR: Failed to verify Coinbase connectivity: 401 Unauthorized
+ERROR: Check COINBASE_CREDENTIALS configuration
+```
+
 ### Setting Up Coinbase Credentials
 
 1. **Get your API key from Coinbase Developer Platform**:
@@ -148,31 +171,50 @@ The application uses a modular exchange authentication system located in the `ex
 
 ### Order Placement
 
-The `place_order()` function handles both buy and sell orders:
+The `place_order()` function places **limit orders** (not market orders) for price control:
+
+**Limit Orders:**
+- All orders use `limit_limit_gtc` (Good Till Canceled) order type
+- Requires `close_price` parameter to set the limit price
+- Orders will only execute at the specified price or better
+- Provides protection against slippage in volatile markets
 
 **Buy Orders:**
 - `quantity_type="cash"` → Spends specified amount of quote currency (e.g., $100 USD)
-  - Uses Coinbase `quote_size` parameter
+  - Uses Coinbase `quote_size` + `limit_price` parameters
 - `quantity_type="units"` → Buys specified amount of base currency (e.g., 0.5 BTC)
-  - Uses Coinbase `base_size` parameter
+  - Uses Coinbase `base_size` + `limit_price` parameters
 
 **Sell Orders:**
 - `quantity_type="units"` → Sells specified amount of base currency (e.g., 0.001 BTC)
-  - Uses Coinbase `base_size` parameter
+  - Uses Coinbase `base_size` + `limit_price` parameters
 - `quantity_type="cash"` → Calculates units from cash amount and close price
   - Formula: `units = cash_amount / close_price`
-  - Then uses Coinbase `base_size` parameter with calculated units
+  - Then uses Coinbase `base_size` + `limit_price` parameters with calculated units
+
+**Decimal Precision:**
+- Automatically fetches precision requirements from Coinbase API for each product
+- BTC: 8 decimal places (base_increment: 0.00000001)
+- ETH: 18 decimal places
+- USD/EUR: 2 decimal places (quote_increment: 0.01)
+- Ensures orders are formatted correctly on first attempt (critical for one-time webhooks)
 
 Example:
 ```python
 from exchanges import place_order
 
-# Buy $100 worth of BTC
+# Buy $100 worth of BTC at limit price $50,000
 place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0)
 
-# Sell $100 worth of BTC at current price
+# Sell $100 worth of BTC at current price as limit
 place_order("BTC-USD", "sell", "cash", 100.0, close_price=50000.0)  # Sells 0.002 BTC
 ```
+
+**Important Notes:**
+- `close_price` is **required** for all orders (used as the limit price)
+- Limit orders may not fill if the market price moves away from the limit price
+- This is safer than market orders which can execute at unpredictable prices
+- For TradingView webhooks, use the `{{close}}` variable to pass the current price
 
 ## Logging and Monitoring
 

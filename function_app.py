@@ -4,16 +4,17 @@ import logging
 import os
 from typing import Any, Dict, Optional, cast
 from validate import check_headers, validate_payload, DRY_RUN_MODE
-from exchanges import place_order
+from exchanges import place_order, verify_coinbase_connection
 
 app = func.FunctionApp()
 
+# Startup check: Verify Coinbase connectivity
+_coinbase_verified = False
 
 @app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS)
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
-    logging.getLogger().setLevel(logging.getLevelNamesMapping().get(os.getenv("LOG_LEVEL", "INFO"), logging.INFO))
-    logging.info('TradingView webhook request received')
     
+    logging.info('TradingView webhook request received') 
     # Get client IP
     x_forwarded_for = cast(Optional[str], req.headers.get('X-Forwarded-For'))  # type: ignore[call-overload]
     client_ip: Optional[str] = None
@@ -153,6 +154,25 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
                 "status": "error",
                 "message": f"Failed to place order: {str(e)}"
             }),
+            status_code=500,
+            mimetype="application/json"
+        )
+
+
+@app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS)
+def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
+    
+    try:
+        result: Dict[str, str] = verify_coinbase_connection()
+        return func.HttpResponse(
+            json.dumps({"status": "success", "message": "Coinbase connectivity verified",
+                        "result": result}),
+            status_code=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": f"Failed to verify Coinbase connectivity: {str(e)}"}),
             status_code=500,
             mimetype="application/json"
         )

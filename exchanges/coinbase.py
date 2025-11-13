@@ -8,7 +8,31 @@ import logging
 import jwt
 import time
 import uuid
-import requests
+
+
+def format_symbol_for_coinbase(symbol: str) -> str:
+    """
+    Convert symbol to Coinbase product format.
+    
+    Coinbase requires format: BTC-USD, ETH-USD, BTC-EUR
+    This function expects the symbol to already be in the correct format from TradingView.
+    
+    Args:
+        symbol: Symbol in format "BTC-EUR", "ETH-USD", etc.
+        
+    Returns:
+        Symbol in uppercase (e.g., "BTC-USD", "ETH-USD", "BTC-EUR")
+        
+    Examples:
+        >>> format_symbol_for_coinbase("BTC-USD")
+        "BTC-USD"
+        >>> format_symbol_for_coinbase("btc-usd")
+        "BTC-USD"
+        >>> format_symbol_for_coinbase("ETH-EUR")
+        "ETH-EUR"
+    """
+    # Just return uppercase - symbol should already be in BTC-USD format
+    return symbol.upper()
 
 
 class CoinbaseCredentials:
@@ -224,6 +248,65 @@ def get_coinbase_authenticator() -> CoinbaseAuthenticator:
     return _authenticator
 
 
+def _get_product_precision(symbol: str, api_base_url: str) -> tuple[int, int]:
+    """
+    Get base and quote decimal precision for a product from Coinbase API.
+    
+    Args:
+        symbol: Trading pair (e.g., "BTC-USD")
+        api_base_url: Coinbase API base URL
+        
+    Returns:
+        Tuple of (base_decimals, quote_decimals)
+    """
+    import requests
+    from decimal import Decimal
+    
+    authenticator = get_coinbase_authenticator()
+    request_path = f"/api/v3/brokerage/market/products/{symbol}"
+    host = api_base_url.replace("https://", "").replace("http://", "")
+    
+    headers = authenticator.get_auth_headers(
+        request_method="GET",
+        request_host=host,
+        request_path=request_path
+    )
+    
+    url = f"{api_base_url}{request_path}"
+    response = requests.get(url, headers=headers, timeout=10)
+    response.raise_for_status()
+    
+    product = response.json()
+    
+    # Parse increment strings to determine decimal places
+    base_increment = Decimal(product.get("base_increment", "0.00000001"))
+    quote_increment = Decimal(product.get("quote_increment", "0.01"))
+    
+    # Count decimal places from increment
+    base_decimals: int = abs(int(base_increment.as_tuple().exponent)) if isinstance(base_increment.as_tuple().exponent, int) else 8
+    quote_decimals: int = abs(int(quote_increment.as_tuple().exponent)) if isinstance(quote_increment.as_tuple().exponent, int) else 2
+    
+    logging.debug(f"Product {symbol}: base_increment={base_increment} ({base_decimals} decimals), "
+                  f"quote_increment={quote_increment} ({quote_decimals} decimals)")
+    
+    return base_decimals, quote_decimals
+
+
+def _format_quantity(value: float, decimals: int) -> str:
+    """
+    Format quantity with exact decimal precision for Coinbase API.
+    
+    Args:
+        value: The numeric value to format
+        decimals: Number of decimal places to use
+        
+    Returns:
+        Formatted string with appropriate decimal places, trailing zeros stripped
+    """
+    formatted = f"{value:.{decimals}f}".rstrip('0').rstrip('.')
+    return formatted
+
+
 def place_order(
     symbol: str,
     action: str,
@@ -233,14 +316,14 @@ def place_order(
     api_base_url: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Place a market order on Coinbase Advanced Trade API.
+    Place a limit order on Coinbase Advanced Trade API.
     
     Args:
         symbol: Trading pair (e.g., "BTC-USD")
         action: "buy" or "sell"
         quantity_type: "cash" or "units"
         quantity: Amount to trade (in cash or units depending on quantity_type)
-        close_price: Current price (required when selling with cash to calculate units)
+        close_price: Current price (required for limit orders and when selling with cash)
         api_base_url: Override default API base URL (for testing)
         
     Returns:
@@ -261,10 +344,16 @@ def place_order(
     if quantity_type not in ["cash", "units"]:
         raise ValueError(f"Invalid quantity_type: {quantity_type}. Must be 'cash' or 'units'")
     
+    # Validate close_price - required for limit orders
+    if close_price is None or close_price <= 0:
+        raise ValueError("close_price is required for limit orders and must be greater than 0")
+    
+    # Convert symbol to Coinbase format (uppercase normalization)
+    coinbase_symbol = format_symbol_for_coinbase(symbol)
+    logging.info(f"Symbol conversion: {symbol} -> {coinbase_symbol}")
+    
     # For SELL orders with cash, we need the close price to calculate units
     if action == "SELL" and quantity_type == "cash":
-        if close_price is None or close_price <= 0:
-            raise ValueError("SELL orders with quantity_type='cash' require a valid close_price to calculate units")
         # Calculate how many units to sell based on cash amount and current price
         calculated_units = quantity / close_price
         logging.info(f"Converting SELL cash amount ${quantity} to {calculated_units} units at price ${close_price}")
@@ -275,30 +364,39 @@ def place_order(
     if api_base_url is None:
         api_base_url = os.getenv("COINBASE_API_BASE_URL", "https://api.coinbase.com")
     
+    # Get product precision from Coinbase API
+    base_decimals, quote_decimals = _get_product_precision(coinbase_symbol, api_base_url)
+    
     # Build order configuration
     order_config: Dict[str, Any] = {}
+    
+    # Format limit price with quote currency decimals
+    formatted_limit_price = _format_quantity(close_price, quote_decimals)
     
     if action == "BUY":
         if quantity_type == "cash":
             # Buy with cash amount (quote currency)
-            order_config["market_market_ioc"] = {
-                "quote_size": str(quantity)
+            order_config["limit_limit_gtc"] = {
+                "quote_size": _format_quantity(quantity, quote_decimals),
+                "limit_price": formatted_limit_price
             }
         else:
             # Buy with crypto amount (base currency)
-            order_config["market_market_ioc"] = {
-                "base_size": str(quantity)
+            order_config["limit_limit_gtc"] = {
+                "base_size": _format_quantity(quantity, base_decimals),
+                "limit_price": formatted_limit_price
             }
     else:  # SELL
         # Sell always uses base_size (crypto amount)
-        order_config["market_market_ioc"] = {
-            "base_size": str(quantity)
+        order_config["limit_limit_gtc"] = {
+            "base_size": _format_quantity(quantity, base_decimals),
+            "limit_price": formatted_limit_price
         }
     
     # Build request body
-    request_body = {
+    request_body: Dict[str, Any] = {
         "client_order_id": str(uuid.uuid4()),
-        "product_id": symbol,
+        "product_id": coinbase_symbol,
         "side": action,
         "order_configuration": order_config
     }
@@ -320,10 +418,10 @@ def place_order(
     url = f"{api_base_url}{request_path}"
     
     # Log request details
-    logging.info(f"Placing {action} order for {symbol}: {quantity_type}={quantity}")
+    logging.info(f"Placing {action} order for {coinbase_symbol}: {quantity_type}={quantity}")
     if action == "SELL" and quantity_type == "units":
         # Log if this was a cash-to-units conversion
-        logging.info(f"Order details - Symbol: {symbol}, Side: {action}, Base Size: {quantity}")
+        logging.info(f"Order details - Symbol: {coinbase_symbol}, Side: {action}, Base Size: {quantity}")
     logging.debug(f"API URL: {url}")
     logging.debug(f"Request body: {json.dumps(request_body, indent=2)}")
     
@@ -352,4 +450,99 @@ def place_order(
         raise ValueError(f"Order failed: {error_msg}. Details: {error_details}")
     
     return result
+
+
+def verify_coinbase_connection(api_base_url: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Verify Coinbase API connectivity by fetching accounts.
+    
+    This function should be called during startup to ensure:
+    - Credentials are properly configured
+    - JWT authentication is working
+    - API connectivity is established
+    
+    Args:
+        api_base_url: Override default API base URL (for testing)
+        
+    Returns:
+        Dictionary containing account information
+        
+    Raises:
+        ValueError: If credentials are invalid
+        requests.HTTPError: If API request fails
+    """
+    import requests
+    
+    # Get API base URL
+    if api_base_url is None:
+        api_base_url = os.getenv("COINBASE_API_BASE_URL", "https://api.coinbase.com")
+    
+    # Get authenticator
+    authenticator = get_coinbase_authenticator()
+    request_path = "/api/v3/brokerage/accounts"
+    
+    # Extract host from URL for JWT generation
+    host = api_base_url.replace("https://", "").replace("http://", "")
+    
+    headers = authenticator.get_auth_headers(
+        request_method="GET",
+        request_host=host,
+        request_path=request_path
+    )
+    
+    # Make API request - paginate through all accounts
+    url = f"{api_base_url}{request_path}"
+    logging.info("Verifying Coinbase API connectivity...")
+    logging.debug(f"API URL: {url}")
+    
+    all_accounts: list[Dict[str, Any]] = []
+    cursor = None
+    
+    while True:
+        # Add cursor parameter if we have one
+        params = {"limit": 250}
+        if cursor:
+            params["cursor"] = cursor
+        
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        
+        # Collect accounts from this page
+        accounts = result.get("accounts", [])
+        all_accounts.extend(accounts)
+        
+        # Check if there are more pages
+        has_next = result.get("has_next", False)
+        if not has_next:
+            break
+        
+        # Get cursor for next page
+        cursor = result.get("cursor")
+        if not cursor:
+            break
+        
+        logging.debug(f"Fetching next page of accounts (cursor: {cursor})")
+    
+    # Log account information
+    logging.info(f"Coinbase API connection verified successfully!")
+    logging.info(f"Found {len(all_accounts)} account(s) total")
+    
+    # Log balances for audit trail
+    currencies = set(["BTC", "ETH", "USD", "USDC", "LTC", "BCH", "XRP", "ADA", "DOT", "SOL", "APT", "EUR"])
+    balances: Dict[str, str] = {}
+    for account in all_accounts:
+        currency = account.get("currency", "???")
+        if currency not in currencies:
+            continue
+
+        available_balance = account.get("available_balance", {})
+        balance_value = available_balance.get("value", "0")
+        balance_currency = available_balance.get("currency", currency)
+        logging.info(f"  - {currency}: {balance_value} {balance_currency} available")
+        balances[currency] = f"{balance_value} {balance_currency}"
+    
+    logging.debug(f"Total accounts fetched: {len(all_accounts)}")
+    
+    return balances
 
