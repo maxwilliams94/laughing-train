@@ -1,1 +1,8 @@
 azure-functions
+PyJWT
+cryptography
+
+# Development dependencies
+pytest
+pytest-cov
+pytest-mock
