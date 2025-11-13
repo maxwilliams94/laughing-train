@@ -6,7 +6,7 @@
     "ENABLE_IP_WHITELIST": "false",
     "ENABLE_CERT_CHECK": "false",
     "DRY_RUN_MODE": "false",
-    "LOG_LEVEL": "DEBUG",
+    "LOG_LEVEL": "INFO",
     "COINBASE_API_BASE_URL": "https://api.coinbase.com",
     "COINBASE_CREDENTIALS": "{\"name\":\"example-account\",\"api_key\":\"organizations/YOUR_ORG_ID/apiKeys/YOUR_KEY_ID\",\"private_key\":\"-----BEGIN EC PRIVATE KEY-----\\nYOUR_PRIVATE_KEY_HERE\\n-----END EC PRIVATE KEY-----\\n\"}"
   }

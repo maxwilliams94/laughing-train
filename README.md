@@ -6,12 +6,12 @@ The webhook handler supports two security verification methods that can be enabl
 
 ### Environment Variables
 
-- **`ENABLE_IP_WHITELIST`** (default: `false`)
+- **`ENABLE_IP_WHITELIST`** (default: true`)
   - Set to `true` to enable IP address whitelisting
   - When enabled, only requests from IPs in `TRADINGVIEW_ALLOWED_IPS` will be accepted
   - Configure allowed IPs in `validate.py`
 
-- **`ENABLE_CERT_CHECK`** (default: `false`)
+- **`ENABLE_CERT_CHECK`** (default: `true`)
   - Set to `true` to enable client certificate verification
   - When enabled, validates the client certificate against TradingView's expected certificate subject:
     ```
@@ -22,7 +22,7 @@ The webhook handler supports two security verification methods that can be enabl
     CN = webhook-server@tradingview.com
     ```
 
-- **`DRY_RUN_MODE`** (default: `false`)
+- **`DRY_RUN_MODE`** (default: `true`)
   - Set to `true` to enable dry-run mode
   - When enabled, webhooks are validated but no actual order processing occurs
   - Returns acknowledgement with `"dry_run": true` flag
