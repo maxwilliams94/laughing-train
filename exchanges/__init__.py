@@ -30,11 +30,12 @@ class ExchangeAuthenticator(Protocol):
 
 
 # Re-export authenticators for easy imports
-from .coinbase import get_coinbase_authenticator
+from .coinbase import get_coinbase_authenticator, place_order
 from .kraken import get_kraken_authenticator
 
 __all__ = [
     'ExchangeAuthenticator',
     'get_coinbase_authenticator',
     'get_kraken_authenticator',
+    'place_order',
 ]

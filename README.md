@@ -28,6 +28,15 @@ The webhook handler supports two security verification methods that can be enabl
   - Returns acknowledgement with `"dry_run": true` flag
   - Useful for testing webhook integration without placing real orders
 
+- **`LOG_LEVEL`** (default: `INFO`)
+  - Set to `DEBUG` for detailed API request/response logging
+  - Set to `INFO` for normal operation logging
+  - Set to `WARNING` or `ERROR` for minimal logging
+
+- **`COINBASE_API_BASE_URL`** (default: `https://api.coinbase.com`)
+  - Override the Coinbase API base URL
+  - Useful for testing against sandbox environments
+
 - **`COINBASE_CREDENTIALS`** (required for Coinbase integration)
   - JSON string containing Coinbase API credentials
   - Format: `{"name": "account-name", "api_key": "organizations/.../apiKeys/...", "private_key": "-----BEGIN EC PRIVATE KEY-----\\n...\\n-----END EC PRIVATE KEY-----\\n"}`
@@ -136,6 +145,112 @@ The application uses a modular exchange authentication system located in the `ex
 - **`exchanges/coinbase.py`** - Coinbase Advanced Trade API (JWT authentication)
 - **`exchanges/kraken.py`** - Kraken API (placeholder for future implementation)
 - **`exchanges/__init__.py`** - Common interface and exports
+
+### Order Placement
+
+The `place_order()` function handles both buy and sell orders:
+
+**Buy Orders:**
+- `quantity_type="cash"` → Spends specified amount of quote currency (e.g., $100 USD)
+  - Uses Coinbase `quote_size` parameter
+- `quantity_type="units"` → Buys specified amount of base currency (e.g., 0.5 BTC)
+  - Uses Coinbase `base_size` parameter
+
+**Sell Orders:**
+- `quantity_type="units"` → Sells specified amount of base currency (e.g., 0.001 BTC)
+  - Uses Coinbase `base_size` parameter
+- `quantity_type="cash"` → Calculates units from cash amount and close price
+  - Formula: `units = cash_amount / close_price`
+  - Then uses Coinbase `base_size` parameter with calculated units
+
+Example:
+```python
+from exchanges import place_order
+
+# Buy $100 worth of BTC
+place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0)
+
+# Sell $100 worth of BTC at current price
+place_order("BTC-USD", "sell", "cash", 100.0, close_price=50000.0)  # Sells 0.002 BTC
+```
+
+## Logging and Monitoring
+
+Since TradingView webhooks don't show the response, all critical information is logged:
+
+### Successful Orders
+When an order is placed successfully, the following is logged at INFO level:
+```
+================================================================================
+ORDER PLACED SUCCESSFULLY
+Order ID: abc123-def456-ghi789
+Product: BTC-USD
+Side: BUY
+Webhook Data: action=buy, quantity=100, quantity_type=cash, close_price=50000.0
+Full API Response: {
+  "success": true,
+  "success_response": {
+    "order_id": "abc123-def456-ghi789",
+    ...
+  }
+}
+================================================================================
+```
+
+### Failed Orders
+When an order fails, the following is logged at ERROR level:
+```
+================================================================================
+ORDER PLACEMENT FAILED
+Error: Insufficient funds
+Error Type: ValueError
+Webhook Data: {
+  "symbol": "BTC-USD",
+  "action": "buy",
+  ...
+}
+================================================================================
+Full exception traceback:
+...
+```
+
+### Debug Logging
+Set `LOG_LEVEL=DEBUG` to see:
+- JWT token generation details
+- Complete API request bodies
+- Full HTTP response details
+- Cash-to-units conversion calculations
+
+**Best Practices:**
+- Always monitor logs in production
+- Set up alerts for ERROR level logs
+- Use Application Insights or similar for log aggregation
+- Review logs after each webhook to verify orders were placed correctly
+
+### Viewing Logs
+
+**Local Development:**
+```bash
+# Start the function locally
+func start
+
+# Logs will appear in the terminal
+```
+
+**Azure Portal:**
+1. Go to your Function App
+2. Select "Functions" → "arbWebhook"
+3. Click "Monitor" → "Logs"
+4. Or use Application Insights for advanced querying
+
+**Azure CLI:**
+```bash
+# Stream live logs
+az webapp log tail --name <function-app-name> --resource-group <resource-group>
+
+# Download logs
+az webapp log download --name <function-app-name> --resource-group <resource-group>
+```
 
 To add a new exchange:
 1. Create `exchanges/your_exchange.py`

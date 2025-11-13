@@ -1,6 +1,7 @@
 azure-functions
 PyJWT
 cryptography
+requests
 
 # Development dependencies
 pytest

@@ -8,6 +8,7 @@ import logging
 import jwt
 import time
 import uuid
+import requests
 
 
 class CoinbaseCredentials:
@@ -114,7 +115,7 @@ class CoinbaseAuthenticator:
         uri = f"{request_method} {request_host}{request_path}"
         
         # JWT payload
-        payload = {
+        payload: Dict[str, Any] = {
             "iss": "cdp",  # Issuer
             "nbf": current_time,  # Not before
             "exp": current_time + min(expires_in, 120),  # Expiration (max 120 seconds)
@@ -221,3 +222,134 @@ def get_coinbase_authenticator() -> CoinbaseAuthenticator:
         logging.info(f"Initialized Coinbase authenticator for account: {credentials.name}")
     
     return _authenticator
+
+
+def place_order(
+    symbol: str,
+    action: str,
+    quantity_type: str,
+    quantity: float,
+    close_price: Optional[float] = None,
+    api_base_url: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Place a market order on Coinbase Advanced Trade API.
+    
+    Args:
+        symbol: Trading pair (e.g., "BTC-USD")
+        action: "buy" or "sell"
+        quantity_type: "cash" or "units"
+        quantity: Amount to trade (in cash or units depending on quantity_type)
+        close_price: Current price (required when selling with cash to calculate units)
+        api_base_url: Override default API base URL (for testing)
+        
+    Returns:
+        Dictionary with order response from Coinbase API
+        
+    Raises:
+        ValueError: If parameters are invalid
+        requests.HTTPError: If API request fails
+    """
+    import requests
+    
+    # Validate action
+    action = action.upper()
+    if action not in ["BUY", "SELL"]:
+        raise ValueError(f"Invalid action: {action}. Must be 'buy' or 'sell'")
+    
+    # Validate quantity_type
+    if quantity_type not in ["cash", "units"]:
+        raise ValueError(f"Invalid quantity_type: {quantity_type}. Must be 'cash' or 'units'")
+    
+    # For SELL orders with cash, we need the close price to calculate units
+    if action == "SELL" and quantity_type == "cash":
+        if close_price is None or close_price <= 0:
+            raise ValueError("SELL orders with quantity_type='cash' require a valid close_price to calculate units")
+        # Calculate how many units to sell based on cash amount and current price
+        calculated_units = quantity / close_price
+        logging.info(f"Converting SELL cash amount ${quantity} to {calculated_units} units at price ${close_price}")
+        quantity = calculated_units
+        quantity_type = "units"  # Now we're working with units
+    
+    # Get API base URL
+    if api_base_url is None:
+        api_base_url = os.getenv("COINBASE_API_BASE_URL", "https://api.coinbase.com")
+    
+    # Build order configuration
+    order_config: Dict[str, Any] = {}
+    
+    if action == "BUY":
+        if quantity_type == "cash":
+            # Buy with cash amount (quote currency)
+            order_config["market_market_ioc"] = {
+                "quote_size": str(quantity)
+            }
+        else:
+            # Buy with crypto amount (base currency)
+            order_config["market_market_ioc"] = {
+                "base_size": str(quantity)
+            }
+    else:  # SELL
+        # Sell always uses base_size (crypto amount)
+        order_config["market_market_ioc"] = {
+            "base_size": str(quantity)
+        }
+    
+    # Build request body
+    request_body = {
+        "client_order_id": str(uuid.uuid4()),
+        "product_id": symbol,
+        "side": action,
+        "order_configuration": order_config
+    }
+    
+    # Get authenticator and generate headers
+    authenticator = get_coinbase_authenticator()
+    request_path = "/api/v3/brokerage/orders"
+    
+    # Extract host from URL for JWT generation
+    host = api_base_url.replace("https://", "").replace("http://", "")
+    
+    headers = authenticator.get_auth_headers(
+        request_method="POST",
+        request_host=host,
+        request_path=request_path
+    )
+    
+    # Make API request
+    url = f"{api_base_url}{request_path}"
+    
+    # Log request details
+    logging.info(f"Placing {action} order for {symbol}: {quantity_type}={quantity}")
+    if action == "SELL" and quantity_type == "units":
+        # Log if this was a cash-to-units conversion
+        logging.info(f"Order details - Symbol: {symbol}, Side: {action}, Base Size: {quantity}")
+    logging.debug(f"API URL: {url}")
+    logging.debug(f"Request body: {json.dumps(request_body, indent=2)}")
+    
+    response = requests.post(url, headers=headers, json=request_body, timeout=30)
+    response.raise_for_status()
+    
+    result = response.json()
+    
+    # Log response details
+    if result.get("success"):
+        success_resp = result.get("success_response", {})
+        logging.info(f"Order API response - Success: True, Order ID: {success_resp.get('order_id')}, "
+                    f"Product: {success_resp.get('product_id')}, Side: {success_resp.get('side')}")
+    else:
+        logging.warning(f"Order API response - Success: False")
+    
+    logging.debug(f"Full API response: {json.dumps(result, indent=2)}")
+    
+    # Check if order was successful
+    if not result.get("success"):
+        error_response = result.get("error_response", {})
+        error_msg = error_response.get("message", "Unknown error")
+        error_details = error_response.get("error_details", "")
+        error_reason = error_response.get("error", "UNKNOWN")
+        logging.error(f"Order failed - Error: {error_reason}, Message: {error_msg}, Details: {error_details}")
+        raise ValueError(f"Order failed: {error_msg}. Details: {error_details}")
+    
+    return result
+

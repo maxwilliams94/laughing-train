@@ -4,6 +4,7 @@ import logging
 import os
 from typing import Any, Dict, Optional, cast
 from validate import check_headers, validate_payload, DRY_RUN_MODE
+from exchanges import place_order
 
 app = func.FunctionApp()
 
@@ -91,19 +92,67 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
     
-    # TODO: Process the webhook (place order, etc.)
-    
-    return func.HttpResponse(
-        json.dumps({
-            "status": "success",
-            "message": "Webhook received and validated",
-            "data": {
-                "symbol": req_body["symbol"],
-                "action": req_body["action"],
-                "quantity": req_body["quantity"],
-                "quantity_type": req_body["quantity_type"]
-            }
-        }),
-        status_code=200,
-        mimetype="application/json"
-    )
+    # Place order on Coinbase
+    try:
+        logging.info(f"Attempting to place order: {req_body['action']} {req_body['quantity']} "
+                    f"{req_body['quantity_type']} of {req_body['symbol']} at close={req_body['close']}")
+        
+        order_result = place_order(
+            symbol=req_body["symbol"],
+            action=req_body["action"],
+            quantity_type=req_body["quantity_type"],
+            quantity=req_body["quantity"],
+            close_price=req_body["close"]
+        )
+        
+        # Extract order details from response
+        success_response = order_result.get("success_response", {})
+        order_id = success_response.get("order_id", "unknown")
+        product_id = success_response.get("product_id", req_body["symbol"])
+        side = success_response.get("side", req_body["action"])
+        
+        # Log complete order result for audit trail
+        logging.info("="*80)
+        logging.info(f"ORDER PLACED SUCCESSFULLY")
+        logging.info(f"Order ID: {order_id}")
+        logging.info(f"Product: {product_id}")
+        logging.info(f"Side: {side}")
+        logging.info(f"Webhook Data: action={req_body['action']}, quantity={req_body['quantity']}, "
+                    f"quantity_type={req_body['quantity_type']}, close_price={req_body['close']}")
+        logging.info(f"Full API Response: {json.dumps(order_result, indent=2)}")
+        logging.info("="*80)
+        
+        return func.HttpResponse(
+            json.dumps({
+                "status": "success",
+                "message": "Order placed successfully",
+                "order_id": order_id,
+                "data": {
+                    "symbol": req_body["symbol"],
+                    "action": req_body["action"],
+                    "quantity": req_body["quantity"],
+                    "quantity_type": req_body["quantity_type"],
+                    "close": req_body["close"]
+                }
+            }),
+            status_code=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        # Log detailed error information
+        logging.error("="*80)
+        logging.error(f"ORDER PLACEMENT FAILED")
+        logging.error(f"Error: {str(e)}")
+        logging.error(f"Error Type: {type(e).__name__}")
+        logging.error(f"Webhook Data: {json.dumps(req_body, indent=2)}")
+        logging.error("="*80)
+        logging.exception("Full exception traceback:")
+        
+        return func.HttpResponse(
+            json.dumps({
+                "status": "error",
+                "message": f"Failed to place order: {str(e)}"
+            }),
+            status_code=500,
+            mimetype="application/json"
+        )
