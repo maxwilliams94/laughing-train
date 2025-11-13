@@ -6,6 +6,10 @@
         "isEnabled": true,
         "excludedTypes": "Request"
       }
+    },
+    "logLevel": {
+      "Function": "Information",
+      "default": "Warning"
     }
   },
   "extensionBundle": {

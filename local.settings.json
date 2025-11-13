@@ -5,6 +5,7 @@
     "AzureWebJobsStorage": "",
     "ENABLE_IP_WHITELIST": "false",
     "ENABLE_CERT_CHECK": "false",
-    "DRY_RUN_MODE": "false"
+    "DRY_RUN_MODE": "false",
+    "LOG_LEVEL": "DEBUG"
   }
 }

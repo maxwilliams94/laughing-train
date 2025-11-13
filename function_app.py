@@ -1,13 +1,16 @@
 import azure.functions as func
 import json
 import logging
+import os
 from typing import Any, Dict, Optional, cast
 from validate import check_headers, validate_payload, DRY_RUN_MODE
 
 app = func.FunctionApp()
 
+
 @app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS)
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
+    logging.getLogger().setLevel(logging.getLevelNamesMapping().get(os.getenv("LOG_LEVEL", "INFO"), logging.INFO))
     logging.info('TradingView webhook request received')
     
     # Get client IP

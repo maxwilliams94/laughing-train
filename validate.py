@@ -3,9 +3,9 @@ import logging
 import os
 
 # Environment variables for security checks
-ENABLE_IP_WHITELIST = bool(os.getenv("ENABLE_IP_WHITELIST", "true").lower())
-ENABLE_CERT_CHECK = bool(os.getenv("ENABLE_CERT_CHECK", "true").lower())
-DRY_RUN_MODE = bool(os.getenv("DRY_RUN_MODE", "true").lower())
+ENABLE_IP_WHITELIST = os.getenv("ENABLE_IP_WHITELIST", "true").lower() == "true"
+ENABLE_CERT_CHECK = os.getenv("ENABLE_CERT_CHECK", "false").lower() == "true"
+DRY_RUN_MODE = os.getenv("DRY_RUN_MODE", "true").lower() == "true"
 
 # TradingView webhook IPs (you should update this with actual IPs)
 # TradingView doesn't publish official webhook IPs, so you may need to whitelist specific IPs
@@ -42,6 +42,7 @@ def check_headers(headers: Dict[str, str], client_ip: Optional[str] = None,
     Returns:
         Tuple of (is_valid, error_message)
     """
+    logging.debug(f"ENABLE_IP_WHITELIST={ENABLE_IP_WHITELIST}, ENABLE_CERT_CHECK={ENABLE_CERT_CHECK}, DRY_RUN_MODE={DRY_RUN_MODE}")
     # Check Content-Type
     content_type = headers.get('content-type', '').lower()
     if 'application/json' not in content_type:
