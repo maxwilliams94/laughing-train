@@ -11,10 +11,59 @@ app = func.FunctionApp()
 # Startup check: Verify Coinbase connectivity
 _coinbase_verified = False
 
+# Get password from environment (if empty, no password check needed)
+WEBHOOK_PASSWORD = os.getenv("WEBHOOK_PASSWORD", "")
+
+
+def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
+    """
+    Check if the request has the correct password.
+    
+    Args:
+        req: HTTP request object
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    # If no password is configured, allow all requests
+    if not WEBHOOK_PASSWORD:
+        return True, None
+    
+    # Check for password in Authorization header (Bearer token style)
+    auth_header = req.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        if token == WEBHOOK_PASSWORD:
+            return True, None
+    
+    # Check for password in custom X-Webhook-Password header
+    password_header = req.headers.get('X-Webhook-Password')
+    if password_header == WEBHOOK_PASSWORD:
+        return True, None
+    
+    # Check for password in query parameter
+    password_param = req.params.get('password')
+    if password_param == WEBHOOK_PASSWORD:
+        return True, None
+    
+    return False, "Unauthorized: Invalid or missing password"
+
+
 @app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS)
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     
-    logging.info('TradingView webhook request received') 
+    logging.info('TradingView webhook request received')
+    
+    # Check password first
+    password_valid, password_error = check_password(req)
+    if not password_valid:
+        logging.warning(f"Password check failed: {password_error}")
+        return func.HttpResponse(
+            json.dumps({"error": password_error}),
+            status_code=401,
+            mimetype="application/json"
+        )
+    
     # Get client IP
     x_forwarded_for = cast(Optional[str], req.headers.get('X-Forwarded-For'))  # type: ignore[call-overload]
     client_ip: Optional[str] = None
@@ -161,6 +210,16 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS)
 def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
+    
+    # Check password first
+    password_valid, password_error = check_password(req)
+    if not password_valid:
+        logging.warning(f"Password check failed: {password_error}")
+        return func.HttpResponse(
+            json.dumps({"error": password_error}),
+            status_code=401,
+            mimetype="application/json"
+        )
     
     try:
         result: Dict[str, str] = verify_coinbase_connection()
