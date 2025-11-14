@@ -52,7 +52,7 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
 
 @app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
-    
+    setup_logging()
     logging.info('TradingView webhook request received')
     
     # Check password first
@@ -211,7 +211,7 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET", "POST"])
 def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
-    
+    setup_logging()
     # Check password first
     password_valid, password_error = check_password(req)
     if not password_valid:
@@ -237,3 +237,8 @@ def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype="application/json"
         )
+
+def setup_logging():
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO")
+    )
