@@ -43,6 +43,13 @@ The webhook handler supports two security verification methods that can be enabl
   - Used to generate JWT tokens for Coinbase API authentication
   - Keep this secure - never commit actual credentials to version control
 
+- ** `WEBHOOK_PASSWORD`**
+  - require password to be passed with any requests using any of:
+    - in the POST body
+    - in the `Authorization` Header as Bearer <password>
+    - in the `X-Webhook-Password` header
+    - in the 'password' query parameter
+
 ### Example Configuration
 
 In `local.settings.json`:
@@ -70,12 +77,14 @@ COINBASE_CREDENTIALS = {"name":"my-account","api_key":"organizations/YOUR_ORG/ap
 Expected JSON payload from TradingView:
 ```json
 {
-    "symbol": "BTCUSD",
-    "action": "buy",
-    "quantity_type": "cash",
-    "quantity": "100",
-    "close": "50000.00"
+  "symbol": "BTC-EUR",
+  "action": "buy",
+  "quantity_type": "cash",
+  "quantity": 1,
+  "close": 60000.0,
+  "password": "password"
 }
+
 ```
 
 ### Required Fields

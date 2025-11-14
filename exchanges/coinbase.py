@@ -170,16 +170,19 @@ class CoinbaseAuthenticator:
         request_method: str = "GET",
         request_host: str = "api.coinbase.com",
         request_path: str = "/api/v3/brokerage/accounts",
-        use_cache: bool = True
+        use_cache: bool = False
     ) -> str:
         """
         Get a JWT token, using cached token if still valid.
+        
+        Note: Caching is disabled by default because JWT tokens include the request URI
+        in their signature. Reusing a token across different endpoints will cause 401 errors.
         
         Args:
             request_method: HTTP method
             request_host: API host
             request_path: API endpoint path
-            use_cache: Whether to use cached token if valid
+            use_cache: Whether to use cached token if valid (NOT RECOMMENDED - disabled by default)
             
         Returns:
             JWT token string
@@ -195,7 +198,7 @@ class CoinbaseAuthenticator:
         expires_in = 120
         token = self.generate_jwt(request_method, request_host, request_path, expires_in)
         
-        # Cache the token
+        # Cache the token (only useful if use_cache=True)
         self._cached_token = token
         self._token_expiry = current_time + expires_in
         
