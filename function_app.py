@@ -47,6 +47,16 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
     if password_param == WEBHOOK_PASSWORD:
         return True, None
 
+    # Check for password in request body
+    try:
+        req_body: Dict[str, Any] = req.get_json()
+        body_password: Optional[str] = req_body.get('password')
+        if body_password == WEBHOOK_PASSWORD:
+            return True, None
+    except (ValueError, AttributeError):
+        # If body is not JSON or can't be parsed, continue to other checks
+        pass
+
     return False, "Unauthorized: Invalid or missing password"
 
 
