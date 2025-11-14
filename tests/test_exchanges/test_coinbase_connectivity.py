@@ -5,6 +5,8 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from exchanges.coinbase import verify_coinbase_connection
 
+from typing import Any
+
 
 class TestVerifyCoinbaseConnection:
     """Test the verify_coinbase_connection function."""
@@ -99,14 +101,14 @@ class TestVerifyCoinbaseConnection:
 
 
 @pytest.fixture
-def mock_requests_get() -> Mock:
+def mock_requests_get() -> Any:
     """Mock the requests.get function."""
     with patch('requests.get') as mock_get:
         yield mock_get
 
 
 @pytest.fixture
-def mock_authenticator() -> Mock:
+def mock_authenticator() -> Any:
     """Mock the authenticator singleton."""
     with patch('exchanges.coinbase.get_coinbase_authenticator') as mock_get_auth:
         mock_auth = Mock()

@@ -30,22 +30,23 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
         return True, None
     
     # Check for password in Authorization header (Bearer token style)
-    auth_header = req.headers.get('Authorization')
+    headers: dict[str, str] = dict(req.headers)  # Explicit type for headers
+    auth_header: Optional[str] = headers.get('Authorization')
     if auth_header and auth_header.startswith('Bearer '):
-        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        token: str = auth_header[7:]  # Remove 'Bearer ' prefix
         if token == WEBHOOK_PASSWORD:
             return True, None
-    
+
     # Check for password in custom X-Webhook-Password header
-    password_header = req.headers.get('X-Webhook-Password')
+    password_header: Optional[str] = headers.get('X-Webhook-Password')
     if password_header == WEBHOOK_PASSWORD:
         return True, None
-    
+
     # Check for password in query parameter
-    password_param = req.params.get('password')
+    password_param: Optional[str] = req.params.get('password')
     if password_param == WEBHOOK_PASSWORD:
         return True, None
-    
+
     return False, "Unauthorized: Invalid or missing password"
 
 

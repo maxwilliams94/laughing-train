@@ -5,6 +5,8 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from exchanges.coinbase import place_order
 
+from typing import Any, Tuple
+
 
 class TestPlaceOrder:
     """Test the place_order function."""
@@ -21,7 +23,7 @@ class TestPlaceOrder:
                 "side": "BUY"
             }
         }
-        mock_requests.return_value = mock_response
+        mock_requests.return_value = mock_response  # noqa: F841
         
         # Call place_order with close_price for limit order
         result = place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0)
@@ -57,9 +59,9 @@ class TestPlaceOrder:
                 "side": "BUY"
             }
         }
-        mock_requests.return_value = mock_response
+        mock_requests.return_value = mock_response  # noqa: F841
         
-        result = place_order("ETH-USD", "buy", "units", 0.5, close_price=3000.0)
+        place_order("ETH-USD", "buy", "units", 0.5, close_price=3000.0)
         
         # Check request body
         call_args = mock_requests.call_args
@@ -82,9 +84,9 @@ class TestPlaceOrder:
                 "side": "SELL"
             }
         }
-        mock_requests.return_value = mock_response
+        mock_requests.return_value = mock_response  # noqa: F841
         
-        result = place_order("BTC-USD", "sell", "units", 0.001, close_price=50000.0)
+        place_order("BTC-USD", "sell", "units", 0.001, close_price=50000.0)
         
         # Check request body
         call_args = mock_requests.call_args
@@ -107,10 +109,10 @@ class TestPlaceOrder:
                 "side": "SELL"
             }
         }
-        mock_requests.return_value = mock_response
+        mock_requests.return_value = mock_response  # noqa: F841
         
         # Sell $100 worth at $50,000/BTC should result in 0.002 BTC
-        result = place_order("BTC-USD", "sell", "cash", 100.0, close_price=50000.0)
+        place_order("BTC-USD", "sell", "cash", 100.0, close_price=50000.0)
         
         # Check request body
         call_args = mock_requests.call_args
@@ -156,7 +158,7 @@ class TestPlaceOrder:
                 "error_details": "Account balance too low"
             }
         }
-        mock_requests.return_value = mock_response
+        mock_requests.return_value = mock_response  # noqa: F841
         
         with pytest.raises(ValueError, match="Order failed: Insufficient funds"):
             place_order("BTC-USD", "buy", "cash", 10000.0, close_price=50000.0)
@@ -212,18 +214,18 @@ class TestPlaceOrder:
 
 
 @pytest.fixture
-def mock_requests() -> Mock:
+def mock_requests() -> Any:
     """Mock the requests module."""
     with patch('requests.post') as mock_post:
         yield mock_post
 
 
 @pytest.fixture
-def mock_product_precision() -> Mock:
+def mock_product_precision() -> Any:
     """Mock the _get_product_precision function to avoid API calls."""
     with patch('exchanges.coinbase._get_product_precision') as mock_precision:
         # Return (base_decimals=8, quote_decimals=2) for BTC-USD and (18, 2) for ETH-USD
-        def get_precision(symbol: str, api_base_url: str) -> tuple:
+        def get_precision(symbol: str, api_base_url: str) -> Tuple[int, int]:
             if "ETH" in symbol:
                 return (18, 2)
             return (8, 2)
@@ -232,7 +234,7 @@ def mock_product_precision() -> Mock:
 
 
 @pytest.fixture
-def mock_authenticator() -> Mock:
+def mock_authenticator() -> Any:
     """Mock the authenticator singleton."""
     with patch('exchanges.coinbase.get_coinbase_authenticator') as mock_get_auth:
         mock_auth = Mock()
