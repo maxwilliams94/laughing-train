@@ -1,6 +1,7 @@
 """
 Coinbase API authentication and JWT generation.
 """
+import requests
 from typing import Dict, Any, Optional
 import json
 import os
@@ -471,7 +472,6 @@ def verify_coinbase_connection(api_base_url: Optional[str] = None) -> Dict[str, 
         ValueError: If credentials are invalid
         requests.HTTPError: If API request fails
     """
-    import requests
     
     # Get API base URL
     if api_base_url is None:

@@ -14,6 +14,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read #This is required for actions/checkout
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,4 +55,5 @@ jobs:
           slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_C0FDD8B27BD5421BB7F16B57DBEC6EB0 }}
+          sku: 'flexconsumption'
           scm-do-build-during-deployment: true

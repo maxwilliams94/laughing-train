@@ -231,6 +231,7 @@ def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
     except Exception as e:
+        logging.exception("Coinbase connectivity verification failed:", exc_info=True)
         return func.HttpResponse(
             json.dumps({"status": "error", "message": f"Failed to verify Coinbase connectivity: {str(e)}"}),
             status_code=500,
