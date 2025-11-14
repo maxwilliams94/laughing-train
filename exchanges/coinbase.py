@@ -80,10 +80,10 @@ class CoinbaseCredentials:
             raise ValueError(f"Environment variable '{env_var}' is not set")
         
         try:
-            creds_data = json.loads(creds_json)
+            creds_data: Dict[str, Any] = json.loads(creds_json)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in '{env_var}': {e}")
-        
+        assert isinstance(creds_data, dict), "Credentials JSON must be an object"
         # Validate required fields
         required_fields = ["name", "api_key", "private_key"]
         missing = [f for f in required_fields if f not in creds_data]
