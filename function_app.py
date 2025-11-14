@@ -196,7 +196,7 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error Type: {type(e).__name__}")
         logging.error(f"Webhook Data: {json.dumps(req_body, indent=2)}")
         logging.error("="*80)
-        logging.exception("Full exception traceback:")
+        logging.exception("Full exception traceback:", exc_info=True)
         
         return func.HttpResponse(
             json.dumps({
