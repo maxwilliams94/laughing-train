@@ -12,7 +12,7 @@ class TestPlaceOrder:
     """Test the place_order function."""
     
     def test_buy_with_cash(self, mock_requests: Mock, mock_authenticator: Mock, mock_product_precision: Mock) -> None:
-        """Test buying with cash amount (quote_size)."""
+        """Test buying with cash amount - now converts to units based on price."""
         # Setup mock response
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -26,6 +26,7 @@ class TestPlaceOrder:
         mock_requests.return_value = mock_response  # noqa: F841
         
         # Call place_order with close_price for limit order
+        # Buy $100 worth at $50,000/BTC should result in 0.002 BTC
         result = place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0)
         
         # Verify request was made correctly
@@ -40,9 +41,10 @@ class TestPlaceOrder:
         assert request_body["product_id"] == "BTC-USD"
         assert request_body["side"] == "BUY"
         assert "limit_limit_gtc" in request_body["order_configuration"]
-        assert request_body["order_configuration"]["limit_limit_gtc"]["quote_size"] == "100"  # Trailing zeros stripped
+        # Cash amount is converted to units: 100 / 50000 = 0.002
+        assert request_body["order_configuration"]["limit_limit_gtc"]["base_size"] == "0.002"
         assert request_body["order_configuration"]["limit_limit_gtc"]["limit_price"] == "50000"
-        assert "base_size" not in request_body["order_configuration"]["limit_limit_gtc"]
+        assert "quote_size" not in request_body["order_configuration"]["limit_limit_gtc"]
         
         # Check result
         assert result["success"] is True
@@ -182,6 +184,7 @@ class TestPlaceOrder:
         }
         mock_requests.return_value = mock_response
         
+        # Cash is converted to units (100 / 50000 = 0.002)
         place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0, api_base_url="https://sandbox.coinbase.com")
         
         # Check URL uses custom base
@@ -197,7 +200,7 @@ class TestPlaceOrder:
         }
         mock_requests.return_value = mock_response
         
-        # Test lowercase
+        # Test lowercase - cash is converted to units (100 / 50000 = 0.002)
         place_order("BTC-USD", "buy", "cash", 100.0, close_price=50000.0)
         call_args = mock_requests.call_args
         assert call_args[1]["json"]["side"] == "BUY"
@@ -207,7 +210,7 @@ class TestPlaceOrder:
         call_args = mock_requests.call_args
         assert call_args[1]["json"]["side"] == "SELL"
         
-        # Test mixed case
+        # Test mixed case - cash is converted to units (50 / 50000 = 0.001)
         place_order("BTC-USD", "BuY", "cash", 50.0, close_price=50000.0)
         call_args = mock_requests.call_args
         assert call_args[1]["json"]["side"] == "BUY"

@@ -356,11 +356,11 @@ def place_order(
     coinbase_symbol = format_symbol_for_coinbase(symbol)
     logging.info(f"Symbol conversion: {symbol} -> {coinbase_symbol}")
     
-    # For SELL orders with cash, we need the close price to calculate units
-    if action == "SELL" and quantity_type == "cash":
-        # Calculate how many units to sell based on cash amount and current price
+    # For cash-based orders, we need to calculate units based on close price
+    if quantity_type == "cash":
+        # Calculate how many units to buy/sell based on cash amount and current price
         calculated_units = quantity / close_price
-        logging.info(f"Converting SELL cash amount ${quantity} to {calculated_units} units at price ${close_price}")
+        logging.info(f"Converting {action} cash amount ${quantity} to {calculated_units} units at price ${close_price}")
         quantity = calculated_units
         quantity_type = "units"  # Now we're working with units
     
@@ -377,25 +377,12 @@ def place_order(
     # Format limit price with quote currency decimals
     formatted_limit_price = _format_quantity(close_price, quote_decimals)
     
-    if action == "BUY":
-        if quantity_type == "cash":
-            # Buy with cash amount (quote currency)
-            order_config["limit_limit_gtc"] = {
-                "quote_size": _format_quantity(quantity, quote_decimals),
-                "limit_price": formatted_limit_price
-            }
-        else:
-            # Buy with crypto amount (base currency)
-            order_config["limit_limit_gtc"] = {
-                "base_size": _format_quantity(quantity, base_decimals),
-                "limit_price": formatted_limit_price
-            }
-    else:  # SELL
-        # Sell always uses base_size (crypto amount)
-        order_config["limit_limit_gtc"] = {
-            "base_size": _format_quantity(quantity, base_decimals),
-            "limit_price": formatted_limit_price
-        }
+    # At this point, quantity_type is always "units" (cash was converted above)
+    # All orders use base_size (crypto amount)
+    order_config["limit_limit_gtc"] = {
+        "base_size": _format_quantity(quantity, base_decimals),
+        "limit_price": formatted_limit_price
+    }
     
     # Build request body
     request_body: Dict[str, Any] = {
@@ -422,10 +409,7 @@ def place_order(
     url = f"{api_base_url}{request_path}"
     
     # Log request details
-    logging.info(f"Placing {action} order for {coinbase_symbol}: {quantity_type}={quantity}")
-    if action == "SELL" and quantity_type == "units":
-        # Log if this was a cash-to-units conversion
-        logging.info(f"Order details - Symbol: {coinbase_symbol}, Side: {action}, Base Size: {quantity}")
+    logging.info(f"Placing {action} order for {coinbase_symbol}: {_format_quantity(quantity, base_decimals)} units @ {formatted_limit_price}")
     logging.debug(f"API URL: {url}")
     logging.debug(f"Request body: {json.dumps(request_body, indent=2)}")
     

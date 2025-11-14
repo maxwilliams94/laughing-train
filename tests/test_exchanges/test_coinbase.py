@@ -152,15 +152,15 @@ class TestCoinbaseAuthenticator:
             assert payload["exp"] - payload["nbf"] == 120
     
     def test_get_token_caching(self, authenticator: CoinbaseAuthenticator) -> None:
-        """Test token caching behavior."""
+        """Test token caching behavior when use_cache=True."""
         with patch.object(authenticator, 'generate_jwt', return_value="new.token") as mock_gen:
             # First call should generate
-            token1 = authenticator.get_token()
+            token1 = authenticator.get_token(use_cache=True)
             assert token1 == "new.token"
             assert mock_gen.call_count == 1
             
-            # Second call should use cache
-            token2 = authenticator.get_token()
+            # Second call should use cache (when use_cache=True)
+            token2 = authenticator.get_token(use_cache=True)
             assert token2 == "new.token"
             assert mock_gen.call_count == 1  # Not called again
     
@@ -168,11 +168,11 @@ class TestCoinbaseAuthenticator:
         """Test token regeneration when cache expires."""
         with patch.object(authenticator, 'generate_jwt', side_effect=["token1", "token2"]) as mock_gen:
             with patch('exchanges.coinbase.time.time', side_effect=[100.0, 250.0]):  # Second call is past expiry
-                token1 = authenticator.get_token()
+                token1 = authenticator.get_token(use_cache=True)
                 assert token1 == "token1"
                 
                 # Force cache expiry by advancing time
-                token2 = authenticator.get_token()
+                token2 = authenticator.get_token(use_cache=True)
                 assert token2 == "token2"
                 assert mock_gen.call_count == 2
     
