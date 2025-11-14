@@ -31,7 +31,7 @@ jobs:
       run: |
         pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
         python -m pip install --upgrade pip
-        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+        pip install -r requirements.txt
         popd
 
     - name: 'Run Azure Functions Action'
@@ -42,5 +42,5 @@ jobs:
         package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
         sku: 'flexconsumption'
-        scm-do-build-during-deployment: false
+        scm-do-build-during-deployment: true
         enable-oryx-build: true
