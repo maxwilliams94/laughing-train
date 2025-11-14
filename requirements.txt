@@ -1,5 +1,5 @@
-azure-functions==1.24.0
-# azure-functions-runtime
+azure-functions
+azure-functions-runtime
 PyJWT
 cryptography
 requests
