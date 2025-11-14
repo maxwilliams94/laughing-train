@@ -43,4 +43,4 @@ jobs:
         publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
         sku: 'flexconsumption'
         scm-do-build-during-deployment: false
-        enable-oryx-build: false
+        enable-oryx-build: true
