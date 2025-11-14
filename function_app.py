@@ -50,7 +50,7 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
     return False, "Unauthorized: Invalid or missing password"
 
 
-@app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="arbWebhook", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     
     logging.info('TradingView webhook request received')
@@ -209,7 +209,7 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
         )
 
 
-@app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET", "POST"])
 def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
     
     # Check password first
