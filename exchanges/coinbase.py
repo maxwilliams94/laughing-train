@@ -381,7 +381,8 @@ def place_order(
     # All orders use base_size (crypto amount)
     order_config["limit_limit_gtc"] = {
         "base_size": _format_quantity(quantity, base_decimals),
-        "limit_price": formatted_limit_price
+        "limit_price": formatted_limit_price,
+        "post_only": True  # Ensure post-only (maker) order for reduced fees
     }
     
     # Build request body
