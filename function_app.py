@@ -2,10 +2,10 @@ import azure.functions as func
 import json
 import logging
 import os
-import requests  # For Telegram API
 from typing import Any, Dict, Optional, cast
 from validate import check_headers, validate_payload, DRY_RUN_MODE
 from exchanges import place_order, verify_coinbase_connection
+from notifications import send_telegram_message
 
 app = func.FunctionApp()
 
@@ -66,23 +66,7 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     setup_logging()
     logging.info('TradingView webhook request received')
 
-    # Telegram notification
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-    def send_telegram_message(text: str):
-        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
-            try:
-                resp = requests.post(url, json=payload, timeout=5)
-                if resp.status_code != 200:
-                    logging.warning(f"Telegram sendMessage failed: {resp.text}")
-            except Exception as e:
-                logging.warning(f"Telegram sendMessage error: {e}")
-        else:
-            logging.info("TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not set; skipping Telegram notification.")
-
-    send_telegram_message("arbWebhook request received.")
+    # Telegram helper available at module scope: `send_telegram_message`
     
     # Check password first
     password_valid, password_error = check_password(req)
@@ -155,6 +139,15 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     # Check if in dry-run mode
     if DRY_RUN_MODE:
         logging.info("DRY RUN MODE: Skipping actual order processing")
+        # Notify via Telegram about dry-run webhook receipt (include payload)
+        try:
+            body_json = json.dumps(req_body, indent=2)
+            send_telegram_message(
+                f"DRY RUN: Webhook validated - {req_body['symbol']} {req_body['action']} {req_body['quantity']} {req_body['quantity_type']} close={req_body['close']}\n\n{body_json}"
+            )
+        except Exception:
+            pass
+
         return func.HttpResponse(
             json.dumps({
                 "status": "success",
@@ -202,6 +195,15 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
         logging.info(f"Full API Response: {json.dumps(order_result, indent=2)}")
         logging.info("="*80)
         
+        # Send Telegram notification with order result (include full API response)
+        try:
+            result_json = json.dumps(order_result, indent=2)
+            send_telegram_message(
+                f"Order placed: {side} {req_body['quantity']} {req_body['quantity_type']} of {product_id} - Order ID: {order_id}\n\nResult:\n{result_json}"
+            )
+        except Exception:
+            pass
+
         return func.HttpResponse(
             json.dumps({
                 "status": "success",
@@ -228,6 +230,15 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
         logging.error("="*80)
         logging.exception("Full exception traceback:", exc_info=True)
         
+        # Send Telegram notification with error and request payload
+        try:
+            body_json = json.dumps(req_body, indent=2)
+            send_telegram_message(
+                f"Order placement FAILED: {str(e)}\n\nRequest:\n{body_json}"
+            )
+        except Exception:
+            pass
+
         return func.HttpResponse(
             json.dumps({
                 "status": "error",
