@@ -2,6 +2,7 @@ import azure.functions as func
 import json
 import logging
 import os
+import requests  # For Telegram API
 from typing import Any, Dict, Optional, cast
 from validate import check_headers, validate_payload, DRY_RUN_MODE
 from exchanges import place_order, verify_coinbase_connection
@@ -64,6 +65,24 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     setup_logging()
     logging.info('TradingView webhook request received')
+
+    # Telegram notification
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    def send_telegram_message(text: str):
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+            try:
+                resp = requests.post(url, json=payload, timeout=5)
+                if resp.status_code != 200:
+                    logging.warning(f"Telegram sendMessage failed: {resp.text}")
+            except Exception as e:
+                logging.warning(f"Telegram sendMessage error: {e}")
+        else:
+            logging.info("TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not set; skipping Telegram notification.")
+
+    send_telegram_message("arbWebhook request received.")
     
     # Check password first
     password_valid, password_error = check_password(req)
