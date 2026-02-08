@@ -9,11 +9,6 @@ from notifications import send_telegram_message
 
 app = func.FunctionApp()
 
-# Configure logging at module level
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logger = logging.getLogger(__name__)
-logger.setLevel(LOG_LEVEL)
-
 # Startup check: Verify Coinbase connectivity
 _coinbase_verified = False
 
@@ -325,6 +320,4 @@ def setup_logging():
     )
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
-    
-    # Set module logger level as well
-    logger.setLevel(log_level)
+
