@@ -9,6 +9,11 @@ from notifications import send_telegram_message
 
 app = func.FunctionApp()
 
+# Configure logging at module level
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logger = logging.getLogger(__name__)
+logger.setLevel(LOG_LEVEL)
+
 # Startup check: Verify Coinbase connectivity
 _coinbase_verified = False
 
@@ -65,13 +70,25 @@ def check_password(req: func.HttpRequest) -> tuple[bool, Optional[str]]:
 def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
     setup_logging()
     logging.info('TradingView webhook request received')
+    
+    # Debug logging for request details
+    logging.debug(f"Request URL: {req.url}")
+    logging.debug(f"Request method: {req.method}")
+    logging.debug(f"Request headers: {dict(req.headers)}")
+    try:
+        req_body_debug = req.get_json()
+        logging.debug(f"Request body: {json.dumps(req_body_debug, indent=2)}")
+    except (ValueError, AttributeError) as debug_err:
+        logging.debug(f"Could not parse request body for debug logging: {debug_err}")
 
     # Telegram helper available at module scope: `send_telegram_message`
     
     # Check password first
     password_valid, password_error = check_password(req)
     if not password_valid:
-        logging.warning(f"Password check failed: {password_error}")
+        logging.error(f"Password check failed: {password_error}")
+        forwarded_for: str = cast(str, req.headers.get('X-Forwarded-For', 'unknown'))  # type: ignore[call-overload]
+        logging.debug(f"Failed password check from IP: {forwarded_for}")
         return func.HttpResponse(
             json.dumps({"error": password_error}),
             status_code=401,
@@ -252,10 +269,14 @@ def arbWebhook(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="webhookVerifyConnectivity", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET", "POST"])
 def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
     setup_logging()
+    logging.info('Connectivity verification request received')
+    forwarded_for: str = cast(str, req.headers.get('X-Forwarded-For', 'unknown'))  # type: ignore[call-overload]
+    logging.debug(f"Verification request from: {forwarded_for}")
+    
     # Check password first
     password_valid, password_error = check_password(req)
     if not password_valid:
-        logging.warning(f"Password check failed: {password_error}")
+        logging.error(f"Password check failed: {password_error}")
         return func.HttpResponse(
             json.dumps({"error": password_error}),
             status_code=401,
@@ -279,6 +300,31 @@ def webhookVerifyConnectivity(req: func.HttpRequest) -> func.HttpResponse:
         )
 
 def setup_logging():
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO")
+    """Configure logging with the specified log level.
+    
+    Environment variables:
+        LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default: INFO
+    """
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove existing handlers to avoid duplicates
+    if root_logger.handlers:
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+    
+    # Add console handler with formatter
+    handler = logging.StreamHandler()
+    handler.setLevel(log_level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
+    
+    # Set module logger level as well
+    logger.setLevel(log_level)
